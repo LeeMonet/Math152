@@ -1,0 +1,179 @@
+---
+title: "The effect of IDV on patients with HIV"
+author: "Gbeke Fawehinmi and Janie Neal"
+date: "4/25/2017"
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+aidsdata <- read_csv("~/AIDSdata.csv")
+library("survival")
+library(ggplot2)
+library(survminer)
+
+```
+
+In this paper we will analyze the effect of a drug treatment, IDV, on the time it takes patients to die or develop aids. We hope to build a model that accurately estimates the effect or non-effect of the drug, and analyze that model to gather useful information about how IDV should be used in the future. 
+
+#Meet our Data
+
+Our data set is a collection of observations taken from a sample of 1156 people infected with HIV in order to test the effect of IDV. We have a control group who did not use medicine with IDV and another group who did. These groups are of about equal size. The sample has a much larger proportion of men than women with 738 men and 148 women (Figure 1). The mean age is 38.7 with 75% of the people being 44 or younger, giving us a sample of people mostly in late young adulthood (Figure 2). Our sample has significant numbers of white non-hispanic, black non-hispanic, and hispanic people (Figure 3). Due to the small amount of Asian/Pacific Islander and American Indian people included in the sample we will not make conclusions about the effect of these ancestries on the effectiveness of IDV. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+ggplot(aidsdata, aes(as.factor(sex), fill = as.factor(sex)))+ geom_bar()+ xlab("") +scale_fill_discrete(name="Sex",
+                         breaks= c(as.factor(1:2)),
+                         labels= c("Male", "Female"))+ggtitle("Figure 1")
+```
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+ggplot(aidsdata, aes(age))+geom_freqpoly()+ggtitle("Figure 2")
+
+
+
+ggplot(aidsdata, aes(as.factor(raceth), fill = as.factor(raceth)))+ geom_bar()+xlab("") +scale_fill_discrete(name="Race/Ethnicity",
+                         breaks= c(as.factor(1:5)),
+                         labels=c("White Non-Hispanic", "Black Non-Hispanic", "Hispanic", "Asian, Pacific Islander", "American Indian, Native Alaskan"))+ggtitle("Figure 3")
+```
+
+#The Model
+
+  We are using the Cox proportional hazard regression model,  a method for investigating the effect of several variables upon the time a specified event takes to happen.
+  
+##Assumptions
+
+  The first assumption is that censoring of individuals must not be related to the probability of an event occurring. For example, participants should not be censored when they leave the study as a result of bad effects of the drug. We have no certain way of checking this but believe that the data fulfills this condition.
+
+   The Cox proportional hazard model also, as the name indicates, assumes proportional hazards. We use the R function cox.zph to assess whether our data fulfills this assumption and can be accurately fitted to a proportional hazard model.  For each covariate, the function correlates the corresponding set of scaled Schoenfeld residuals with time, to test for independence between residuals and time. Additionally, it performs a global test for the model as a whole.(Easy Guides) If the function returns a significant p value for the relationship between any covariate's Schoenfeld residuals and time then we must assume the proportional assumption is violated. If we are reasonably confident that no relationships exist, as we are for this data due to high p values, then we can proceed.
+  
+```{r, echo=FALSE}
+#the results of the function on potential variables in our model
+test.ph = coxph(Surv(time,censor)~tx+sex+raceth+karnof+age+ivdrug+cd4 , data=aidsdata)
+result = cox.zph(test.ph)
+result
+
+#A graphic of what the cox.zph function does
+plot(cox.zph(coxph(Surv(time,censor)~tx, data=aidsdata)))
+title(main = "Schoenfel Residuals Example Plot")
+```
+
+##Building and Final Product 
+
+  In order to create the best fitting Cox Ph model for this data, we calculated the AIC, BIC, and a new AIC for survival analysis. 
+  
+  AIC stands for Akaike information criterion, and it measures the quality of each model in a collection of statistical models. It measures the quality by assigning each model with a numerical value, and the best model has the lowest value. The formula is:
+  
+  $$AIC=-2 ln(likelihood) + 2p$$
+  
+  In this case, we used forward model building, which meant we started with a model that had no covariates (just the intercept) and built more models by adding one covariate at a time. This covariate is only added if the AIC calculation with this variable was the lowest one in relation to those of the other variables, and also lower than if no variable was added at all. After adding the explanatory variables that make the AIC the lowest possible, those variables are used in our best fitted model.
+  
+  BIC stands for Bayesian Information Criterion, and it works in the same way as AIC, however, because the likelihood grows with more parameters, then we penalize the BIC by adding ln(n)p instead of just 2p (as it is in the AIC calculation). So the formula for BIC is:
+  
+  $$BIC=-2 ln(likelihood) + ln(n)p$$
+  
+This limits the amount of parameters that are in the model.
+  
+  From further research on AIC, BIC, and survival analysis, we found an equation from the article "Improved AIC Selection Strategy for Survival Analysis", which extends the traditional AIC to apply to survival analysis. The formula is:
+  
+  $$AIC(SUR)= AIC + \frac{2(p+2)(p+3)}{n-p-3}$$
+
+  
+where p is the number of covariates in the model, and n is the total number of observations. This calculation is a better representation of the quality of the model, and is applied to each of the AIC calculations in order to compare them. We will still calculate AIC and BIC, however, these are inferior (especially BIC) to the AIC(SUR).
+  
+	
+
+### Calculating AIC
+
+```{r, warning=FALSE}
+fmod.aic <- coxph(Surv(time,censor) ~ 1, data=aidsdata) #Intercept
+step(fmod.aic, ~ (tx + as.factor(txgrp) + strat2 + as.factor(sex) + as.factor(raceth) + as.factor(ivdrug) + hemophil + karnof + cd4 + priorzdv + age), data=aidsdata, direction="forward", k=2)
+```
+
+By calculating the AIC at all of the steps of the drop-in deviance, we find that the best fitted Cox PH Model uses the variables cd4, karnof, tx, and age.
+
+
+
+### Calculating BIC
+```{r, warning=FALSE}
+
+fmod.bic <- coxph(Surv(time,censor) ~ 1, data=aidsdata) #Intercept
+step(fmod.bic, ~ (tx + as.factor(txgrp) + strat2 + as.factor(sex) + as.factor(raceth) + as.factor(ivdrug) + hemophil + karnof + cd4 + priorzdv + age), data=aidsdata, direction="forward", k=log(851))
+
+```
+
+According to the comparisons of the BIC at all the steps of the drop-in deviance, we find that the best fitted Cox PH model uses the variables cd4 and karnof. This makes sense in relation to the AIC because we are penalizing the likelihood much more now, so the model doesn't allow for as many parameters.
+
+### Calculating AIC(SUR)
+
+By using the Survival Analysis correction formula, we get the following numbers for each of the steps respectively.
+
+```{r}
+981.12
+944.81 + ((2*3*4)/(851-1-3))
+927.06 + ((2*4*5)/(851-2-3))
+922.48 + ((2*5*6)/(851-3-3))
+921.44 + ((2*6*7)/(851-4-3))
+
+922.37 + ((2*7*8)/(851-5-3)) #AIC calculation if we added the next variable, which is as.factor(sex)
+```
+
+We see that the last corrected AIC is in fact still the smallest compared to the other steps. Since this AIC calculation supports the model created by the original AIC, we will use that model as our best fit model.
+
+### Final Model
+The coefficients for the covariates used in our final model are:
+```{r, echo=FALSE}
+coef = coxph(formula = Surv(time, censor) ~ cd4 + karnof + tx + age, 
+    data = aidsdata)$coef
+exp(coef)-1
+``` 
+
+Written in equation form that is $\lambda(t|X_{1i}, X_{2i},X_{3i}, X_{4i})=\lambda_0(t)e^{-0.0118X_{1i}+-0.0579X_{2i}+-0.611X_{3i}+0.022X_{4i}}$.
+  
+  
+##Analysis and Discussion
+
+By analyzing the best fit model, we find that rate of survival of the patients in this trial is related to the following variables: if the patient had IDV in their treatment, the patient's number on the Karnofsky Performance Scale, the baseline CD4 cell count of the patient, and the age of the patient. We can interpret the coefficients in the following ways:
+\begin{enumerate}
+\item For cd4, there is an $1.17\%$ decrease in the expected hazard for each 1 unit increase in baseline CD4 count. 
+\item For Karnofsky Performance scale, there is an $5.63\%$ decrease in the expected hazard for each 1 unit increase. 
+\item For treatment, there is an $45.7\%$ decrease in the expected hazard when receiving the treatment verus not. 
+\item For age, there is an $2.23\%$ increase in the expected hazard for each year increase in age. 
+\end{enumerate}
+
+In less mathematical terms, younger, healthier patients with higher CD4 count are slightly more likely to survive or not develop AIDS at any time, and patients that recieved IDV are 45% more likely to survive or not develop AIDS than those who didn't. We are comfortable with generalizing this to American men between the ages of 30 and 50 yeaars old, because they were well represented in the study. Because the data comes from a double blind, placebo-controlled trial we are able to say IDV caused the decrease in the expected hazard of dying or developing AIDS.
+
+
+##Fun Visualizations
+
+These survival plots show how cateogrizing the data in different ways can drastically effect how the estimated hazard is calculated. We see a major effect of Karnof Scores on the survival of patients.
+```{r, echo=FALSE}
+fit <- survfit(Surv(time, censor) ~ tx,
+               data = aidsdata)
+# Visualize with survminer
+ggsurvplot(fit, data = aidsdata, risk.table = TRUE)
+
+fit <- survfit(Surv(time, censor) ~ karnof,
+               data = aidsdata)
+ggsurvplot(fit,  size = 1,  # change line size
+           linetype = "strata", # change line type by groups
+           break.time.by = 250, # break time axis by 250
+          
+           conf.int = TRUE, # Add confidence interval
+           pval = TRUE # Add p-value
+           )
+
+```
+
+#Credits
+
+##Bibliography
+Liang, Hua, and Guohua Zou. “Improved AIC Selection Strategy for Survival Analysis.” Computational statistics & data analysis 52.5 (2008): 2538–2548. PMC. Web. 27 Apr. 2017.
+
+Easy Guides. "Cox Model Assumptions." Rbloggers. Tal Galili. 12 Dec. 2016. Web. 27 Apr. 2017 https://www.r-bloggers.com/cox-model-assumptions/
+
+##Who did what
+Janie: Research on cox.zph
+Gbeke: Research on AIC and BIC for survival models
